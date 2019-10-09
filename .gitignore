@@ -1,0 +1,10 @@
+*.pyc
+build/
+log/
+tmp/
+temp/
+*.log
+*.tmp
+*.dat
+.idea/
+*.iml
