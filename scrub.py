@@ -90,7 +90,7 @@ def scrub_tweets(api, dry_run: bool = False):
                     print(f"Deleted (noop):{status.id} : {status.text}")
                 else:
                     print(f"Deleted:{status.id} : {status.text}")
-                    # api.destroy_status(status.id)
+                    api.destroy_status(status.id)
             except Exception as e:
                 print(f"Failed to delete {status.id} : {status}")
                 print(f"Error: {e}")
