@@ -8,6 +8,7 @@
 """
 from argparse import ArgumentParser
 import tweepy
+import time
 import sys
 
 
@@ -22,7 +23,20 @@ def get_arguments():
         "--noop",
         required=False,
         action="store_true",
+        default=False,
         help="No operation flag (for dry runs).")
+    parser.add_argument(
+        "--timeline",
+        required=False,
+        action="store_true",
+        help="Purge timeline"
+    )
+    parser.add_argument(
+        "--dms",
+        required=False, \
+        action="store_true",
+        help="Purge direct messages"
+    )
     parser.add_argument(
         "--key",
         required=True,
@@ -62,7 +76,7 @@ def twitter_auth(key, secret):
         sys.exit(2)
 
 
-def scrub_tweets(api, dry_run: bool = False):
+def scrub_timeline(api, dry_run: bool = False):
     """
         scrub all items in the user's timeline
         :param api:
@@ -83,19 +97,96 @@ def scrub_tweets(api, dry_run: bool = False):
         else:
             confirm = None
 
+        count = 0
+        errors = 0
         for status in tweepy.Cursor(api.user_timeline).items():
             try:
-                # ToDo: Remove the comment below to make it real.
                 if dry_run:
                     print(f"Deleted (noop):{status.id} : {status.text}")
                 else:
                     print(f"Deleted:{status.id} : {status.text}")
                     api.destroy_status(status.id)
+                    count += 1
+                    time.sleep(1)
             except Exception as e:
                 print(f"Failed to delete {status.id} : {status}")
                 print(f"Error: {e}")
+                errors += 0
+        print(f"Timeline purge completed.\n"
+              f"Messages deleted:{count}\n"
+              f"Message errors: {errors}")
+
+
+def scrub_direct_messages(api, dry_run: bool = False):
+    """
+        Scrub direct messages.
+
+        :param api:
+        :param dry_run:
+        :return:
+    """
+    confirm = None
+    while confirm is None:
+        print("Please verify that you wish to delete all "
+              "direct messages for this account.")
+        print("Warning: This is an unrecoverable action.")
+        confirm = input("Enter yes/no: ")
+        if confirm.lower() == "yes":
+            confirm = True
+            break
+        elif confirm.lower() == "no":
+            print("Aborting.")
+            sys.exit(1)
+        else:
+            confirm = None
+
+    count = 0
+    errors = 0
+    while True:
+        try:
+            chunk = api.list_direct_messages()
+            if len(chunk) >= 1:
+                for message in chunk:
+
+                    if dry_run:
+                        print(f"Deleted (noop):{message} : {message}")
+                    else:
+                        print(f"Deleted:{message} : {message}")
+                        message.destroy()
+                        count += 1
+
+            else:
+                break
+        except Exception as e:
+            print(f"Failed to delete {message}")
+            print(f"Error: {e}")
+            errors += 1
+    print(f"DM purge completed.\n"
+          f"Messages deleted:{count}\n"
+          f"Message errors: {errors}")
+
+
+def scrub_twitter(api, timeline: bool, dms: bool, dry_run):
+    if not timeline and not dms:
+        print("You must use --timeline or --dms to do any actions.")
+        sys.exit(1)
+
+    print(f"timeline:{timeline}")
+    print(f"dms:{dms}")
+
+    if timeline:
+        print("Purge timelines")
+        scrub_timeline(api, dry_run)
+
+    if dms:
+        print("Purge Direct Messages")
+        scrub_direct_messages(api, dry_run)
 
 
 if __name__ == "__main__":
     args = get_arguments()
-    scrub_tweets(twitter_auth(args.key, args.secret), args.noop)
+    scrub_twitter(
+        twitter_auth(args.key, args.secret),
+        args.timeline,
+        args.dms,
+        args.noop)
