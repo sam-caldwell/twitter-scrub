@@ -32,6 +32,12 @@ def get_arguments():
         help="Purge timeline"
     )
     parser.add_argument(
+        "--likes",
+        required=False,
+        action="store_true",
+        help="Purge likes"
+    )
+    parser.add_argument(
         "--dms",
         required=False, \
         action="store_true",
@@ -58,7 +64,6 @@ def twitter_auth(key, secret):
         :return:
     """
     try:
-
         auth = tweepy.OAuthHandler(key, secret)
         auth_url = auth.get_authorization_url()
 
@@ -67,7 +72,6 @@ def twitter_auth(key, secret):
         while verification_code == "" and verification_code.lower() != "q":
             verification_code = input(f"Enter Verification Code: ")
         auth.get_access_token(verification_code)
-
         api = tweepy.API(auth)
         print("User Auth successful.  User:{api.me().screen_name}")
         return api
@@ -99,22 +103,62 @@ def scrub_timeline(api, dry_run: bool = False):
 
         count = 0
         errors = 0
-        for status in tweepy.Cursor(api.user_timeline).items():
+        while True:
+            for status in tweepy.Cursor(api.user_timeline).items():
+                try:
+                    if dry_run:
+                        print(f"Deleted (noop):{status.id} : {status.text}")
+                    else:
+                        print(f"Deleted:{status.id} : {status.text}")
+                        api.destroy_status(status.id)
+                        count += 1
+                        time.sleep(1)
+                except Exception as e:
+                    print(f"Failed to delete {status.id} : {status}")
+                    print(f"Error: {e}")
+                    errors += 0
+                if (100 * errors / count) > 25:
+                    print("errors exceeds bounds")
+                    sys.exit(99)
+            print(f"Timeline purge completed.\n"
+                  f"Messages deleted:{count}\n"
+                  f"Message errors: {errors}")
+            if count == 0:
+                break
+
+
+def scrub_likes(api, dry_run: bool = False):
+    """
+        Scrub likes
+
+        :param api:
+        :param dry_run:
+        :return:
+    """
+    count = 0
+    errors = 0
+    while True:
+        for like in tweepy.Cursor(api.favorites).items():
             try:
                 if dry_run:
-                    print(f"Deleted (noop):{status.id} : {status.text}")
+                    print(f"Deleted (noop):{like.id}")
                 else:
-                    print(f"Deleted:{status.id} : {status.text}")
-                    api.destroy_status(status.id)
+                    print(f"Deleted:{like.id}")
+                    api.destroy_favorite(like.id)
                     count += 1
                     time.sleep(1)
             except Exception as e:
-                print(f"Failed to delete {status.id} : {status}")
+                print(f"Failed to delete {like.id}")
                 print(f"Error: {e}")
                 errors += 0
+            if (100 * errors / count) > 25:
+                print("errors exceeds bounds")
+                sys.exit(99)
         print(f"Timeline purge completed.\n"
               f"Messages deleted:{count}\n"
               f"Message errors: {errors}")
+        if count == 0:
+            break
 
 
 def scrub_direct_messages(api, dry_run: bool = False):
@@ -166,7 +210,7 @@ def scrub_direct_messages(api, dry_run: bool = False):
           f"Message errors: {errors}")
 
 
-def scrub_twitter(api, timeline: bool, dms: bool, dry_run):
+def scrub_twitter(api, timeline: bool, dms: bool, likes: bool, dry_run: bool):
     if not timeline and not dms:
         print("You must use --timeline or --dms to do any actions.")
         sys.exit(1)
@@ -182,6 +226,10 @@ def scrub_twitter(api, timeline: bool, dms: bool, dry_run):
         print("Purge Direct Messages")
         scrub_direct_messages(api, dry_run)
 
+    if likes:
+        print("Purge likes")
+        scrub_likes(api, dry_run)
+
 
 if __name__ == "__main__":
     args = get_arguments()
@@ -189,4 +237,5 @@ if __name__ == "__main__":
         twitter_auth(args.key, args.secret),
         args.timeline,
         args.dms,
+        args.likes,
         args.noop)
